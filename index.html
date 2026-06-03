@@ -149,8 +149,31 @@
 
   </div><!-- /#app-wrapper -->
 
+  <!-- ===== FILE UPLOAD BUTTONS — Thêm Ảnh / Thêm Nhạc (hidden input + styled label) ===== -->
+  <div id="file-upload-toolbar" class="file-upload-toolbar" aria-label="Thêm media từ máy tính">
+    <label for="image-upload-input" class="file-upload-btn" title="Thêm Ảnh từ máy tính" aria-label="Thêm Ảnh">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        <circle cx="8.5" cy="8.5" r="1.5" />
+        <polyline points="21 15 16 10 5 21" />
+      </svg>
+      <span class="file-upload-label">Thêm Ảnh</span>
+    </label>
+    <input type="file" id="image-upload-input" class="file-input-hidden" accept="image/*" multiple>
+
+    <label for="music-upload-input" class="file-upload-btn" title="Thêm Nhạc từ máy tính" aria-label="Thêm Nhạc">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 18V5l12-2v13" />
+        <circle cx="6" cy="18" r="3" />
+        <circle cx="18" cy="16" r="3" />
+      </svg>
+      <span class="file-upload-label">Thêm Nhạc</span>
+    </label>
+    <input type="file" id="music-upload-input" class="file-input-hidden" accept="audio/*" multiple>
+  </div>
+
   <!-- ===== IMAGE PLAYLIST — top-right corner, glassmorphism, independent controls ===== -->
-  <div id="image-playlist-container" class="image-playlist-container" aria-label="Image playlist" style="display:none;">
+  <div id="image-playlist-container" class="image-playlist-container playlist-hidden-init" aria-label="Image playlist">
     <button id="img-pl-grid-btn" class="img-pl-arrow" aria-label="Danh sách ảnh" title="Danh sách ảnh">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg>
     </button>
@@ -164,7 +187,7 @@
   </div>
 
   <!-- ===== IMAGE FULL PLAYLIST DROPDOWN — appears below image-playlist-container when grid btn clicked ===== -->
-  <div id="img-full-playlist" class="img-full-playlist" aria-label="Full image list" style="display:none;">
+  <div id="img-full-playlist" class="img-full-playlist" aria-label="Full image list">
     <div class="img-full-list" id="img-full-list"></div>
   </div>
 

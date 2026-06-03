@@ -1,0 +1,45 @@
+# ============================================================
+# Cloudflare Pages — _redirects
+# Chặn truy cập vào các file và thư mục nhạy cảm
+# Trả về 404 thay vì 403 để không tiết lộ sự tồn tại của file
+# ============================================================
+# LƯU Ý: robots.txt và sitemap.xml KHÔNG bị chặn
+# để Googlebot/Bingbot có thể index web bình thường.
+
+# === FILE CẤU HÌNH ===
+/.env                        /404.html 404
+/.env.local                  /404.html 404
+/.env.*                      /404.html 404
+/config.json                 /404.html 404
+/setting.json                /404.html 404
+/vite.config.js              /404.html 404
+/*.config.js                 /404.html 404
+/*.config.ts                 /404.html 404
+/package.json                /404.html 404
+/package-lock.json           /404.html 404
+/yarn.lock                   /404.html 404
+/pnpm-lock.yaml              /404.html 404
+
+# === THƯ MỤC ẨN ===
+/.git/*                      /404.html 404
+/.gitignore                  /404.html 404
+/.github/*                   /404.html 404
+/.vscode/*                   /404.html 404
+/.idea/*                     /404.html 404
+
+# === BUILD & DEPLOY ===
+/node_modules/*              /404.html 404
+/dist/*                      /404.html 404
+/public/*                    /404.html 404
+/*.map                       /404.html 404
+
+# === FILE LOG & BACKUP ===
+/*.log                       /404.html 404
+/*.bak                       /404.html 404
+/*.swp                       /404.html 404
+/*.DS_Store                  /404.html 404
+/Thumbs.db                   /404.html 404
+
+# === SERVER-SIDE SOURCE (không nên public) ===
+/server/*                    /404.html 404
+/src/*                       /404.html 404

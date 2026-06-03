@@ -95,6 +95,36 @@ let musicTracks = [];        // Array of { fileName, displayName, url, index }
 let isPlaylistOpen = false;
 
 // ============================================================
+// Object URL tracking — for URL.createObjectURL() cleanup
+// ============================================================
+
+let objectURLs = {
+  images: [],   // Array of URLs from uploaded images
+  music: []     // Array of URLs from uploaded music
+};
+
+/**
+ * Revoke all object URLs for a given type to prevent memory leaks.
+ * @param {'images'|'music'} type
+ */
+function revokeObjectURLs(type) {
+  const urls = objectURLs[type];
+  if (!urls || urls.length === 0) return;
+  urls.forEach(url => {
+    try { URL.revokeObjectURL(url); } catch {}
+  });
+  objectURLs[type] = [];
+}
+
+/**
+ * Revoke ALL tracked object URLs (both images and music).
+ */
+function revokeAllObjectURLs() {
+  revokeObjectURLs('images');
+  revokeObjectURLs('music');
+}
+
+// ============================================================
 // Auto-Save state keys
 // ============================================================
 
@@ -792,6 +822,12 @@ async function init() {
 
   // Initialize Image Full Playlist Dropdown (grid menu button)
   initImageFullPlaylist();
+
+  // Initialize File Upload handlers (URL.createObjectURL)
+  initFileUploads();
+
+  // Clean up object URLs when user leaves the page
+  window.addEventListener('beforeunload', revokeAllObjectURLs);
 
   // Initialize Audio Auto-Hide (10-11s idle)
   initAudioAutoHide();
@@ -1788,7 +1824,231 @@ if (typeof window !== 'undefined') {
 }
 
 // ============================================================
-// 16. MOBILE TOUCH ENHANCEMENTS
+// 16. IMAGE FULL PLAYLIST DROPDOWN — Grid menu button
+// ============================================================
+
+function initImageFullPlaylist() {
+  const gridBtn = document.getElementById('img-pl-grid-btn');
+  const fullPlaylist = document.getElementById('img-full-playlist');
+  const fullList = document.getElementById('img-full-list');
+
+  if (!gridBtn || !fullPlaylist || !fullList) return;
+
+  // Build full playlist items (all images)
+  function buildFullPlaylist() {
+    fullList.innerHTML = '';
+    IMAGES.forEach((item, i) => {
+      const div = document.createElement('div');
+      div.className = `img-full-item${i === currentIndex ? ' active-bg' : ''}`;
+      div.dataset.index = i;
+
+      const thumb = document.createElement('img');
+      thumb.className = 'img-full-thumb';
+      thumb.src = item.url;
+      thumb.alt = '';
+      thumb.loading = 'lazy';
+
+      const name = document.createElement('span');
+      name.className = 'img-full-name';
+      name.textContent = item.credit || `Background ${i + 1}`;
+
+      div.appendChild(thumb);
+      div.appendChild(name);
+
+      div.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (i === currentIndex) { closeFullPlaylist(); return; }
+        switchBackground(i);
+        closeFullPlaylist();
+      });
+
+      fullList.appendChild(div);
+    });
+  }
+
+  function openFullPlaylist() {
+    if (fullPlaylist.classList.contains('img-full-visible')) return;
+    buildFullPlaylist();
+    fullPlaylist.classList.remove('closing');
+    fullPlaylist.classList.add('img-full-visible');
+  }
+
+  function closeFullPlaylist() {
+    if (!fullPlaylist.classList.contains('img-full-visible')) return;
+    fullPlaylist.classList.add('closing');
+    fullPlaylist.classList.remove('img-full-visible');
+    setTimeout(() => {
+      fullPlaylist.classList.remove('closing');
+    }, 200);
+  }
+
+  // Click grid button to open/close
+  gridBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (fullPlaylist.classList.contains('img-full-visible')) {
+      closeFullPlaylist();
+    } else {
+      openFullPlaylist();
+    }
+  });
+
+  // Click outside to close
+  document.addEventListener('click', (e) => {
+    if (fullPlaylist.classList.contains('img-full-visible')) {
+      const target = e.target;
+      if (!fullPlaylist.contains(target) && target !== gridBtn && !gridBtn.contains(target)) {
+        closeFullPlaylist();
+      }
+    }
+  });
+
+  // Update active background in full playlist items
+  function updateFullPlaylistActiveBg() {
+    if (!fullList) return;
+    const items = fullList.querySelectorAll('.img-full-item');
+    items.forEach((item, i) => {
+      item.classList.toggle('active-bg', i === currentIndex);
+    });
+  }
+
+  // Expose for external call from updateImagePlaylistDots()
+  window._updateFullPlaylistBg = updateFullPlaylistActiveBg;
+}
+
+// ============================================================
+// 16b. FILE UPLOAD HANDLERS — URL.createObjectURL()
+//      Thêm Ảnh / Thêm Nhạc từ máy tính với cleanup
+// ============================================================
+
+function initFileUploads() {
+  const imageInput = document.getElementById('image-upload-input');
+  const musicInput = document.getElementById('music-upload-input');
+
+  if (imageInput) {
+    imageInput.addEventListener('change', handleImageUpload);
+  }
+  if (musicInput) {
+    musicInput.addEventListener('change', handleMusicUpload);
+  }
+}
+
+/**
+ * Handle image file upload: create object URLs, add to IMAGES array, rebuild UI
+ */
+function handleImageUpload(event) {
+  const files = Array.from(event.target.files);
+  if (!files || files.length === 0) return;
+
+  // Filter for image files only
+  const imageFiles = files.filter(f => f.type.startsWith('image/'));
+  if (imageFiles.length === 0) {
+    showToast('Vui lòng chọn file ảnh (JPG, PNG, WebP...)', 'error', 3000);
+    return;
+  }
+
+  // Clean up old uploaded image object URLs to prevent memory leaks
+  revokeObjectURLs('images');
+
+  const newImages = imageFiles.map((file, idx) => {
+    const objectUrl = URL.createObjectURL(file);
+    objectURLs.images.push(objectUrl);
+    return {
+      url: objectUrl,
+      credit: file.name.replace(/\.[^.]+$/, '') || `Uploaded ${idx + 1}`,
+      type: 'image'
+    };
+  });
+
+  const prevCount = IMAGES.length;
+  IMAGES.push(...newImages);
+
+  // Rebuild slides
+  initSlides();
+
+  // Rebuild image playlist dots
+  const container = document.getElementById('image-playlist-container');
+  if (container) {
+    if (IMAGES.length >= 2) {
+      container.classList.remove('playlist-hidden-init');
+    }
+    buildImagePlaylistDots();
+    updateImagePlaylistDots();
+  }
+
+  // If this is the first image added, switch to it
+  if (prevCount === 1 && IMAGES.length > 1) {
+    switchBackground(prevCount);
+  }
+
+  // Show success toast
+  const count = newImages.length;
+  showToast(`📷 Đã thêm ${count} ảnh từ máy tính`, 'success', 3000);
+
+  // Reset the input so user can re-upload same files
+  event.target.value = '';
+}
+
+/**
+ * Handle music file upload: create object URLs, add to musicTracks, rebuild playlist
+ */
+function handleMusicUpload(event) {
+  const files = Array.from(event.target.files);
+  if (!files || files.length === 0) return;
+
+  // Filter for audio files only
+  const audioFiles = files.filter(f => f.type.startsWith('audio/'));
+  if (audioFiles.length === 0) {
+    showToast('Vui lòng chọn file nhạc (MP3, WAV, M4A...)', 'error', 3000);
+    return;
+  }
+
+  // Clean up old uploaded music object URLs to prevent memory leaks
+  revokeObjectURLs('music');
+
+  const wasEmpty = musicTracks.length === 0;
+  const startIndex = musicTracks.length;
+
+  const newTracks = audioFiles.map((file, idx) => {
+    const objectUrl = URL.createObjectURL(file);
+    objectURLs.music.push(objectUrl);
+    return {
+      fileName: file.name,
+      displayName: cleanTrackName(file.name) || `Uploaded ${startIndex + idx + 1}`,
+      url: objectUrl,
+      index: startIndex + idx,
+      _local: true  // mark as local upload
+    };
+  });
+
+  musicTracks.push(...newTracks);
+
+  // Rebuild playlist UI
+  buildPlaylist();
+
+  // Auto-play first uploaded track if no track is currently playing
+  if (wasEmpty && musicTracks.length > 0) {
+    switchTrack(startIndex);
+    if (!isPlaying) {
+      isPlaying = true;
+      updatePlayButton();
+      fadeInAudio();
+      vizDots?.classList.add('active');
+      startLyricsCycle();
+      saveState();
+    }
+  }
+
+  // Update toast welcome message
+  const msg = `🎵 Đã thêm ${newTracks.length} bài nhạc từ máy tính`;
+  showToast(msg, 'success', 3000);
+
+  // Reset the input so user can re-upload same files
+  event.target.value = '';
+}
+
+// ============================================================
+// 16c. MOBILE TOUCH ENHANCEMENTS
 // ============================================================
 
 function initMobileEnhancements() {
@@ -1838,11 +2098,11 @@ function initImagePlaylist() {
   const dotsContainer = document.getElementById('img-pl-dots');
   if (!container || !dotsContainer) return;
 
-  // Show container only if there are 2+ images
+  // Show container only if there are 2+ images — use CSS class for smooth fade-in
   if (IMAGES.length >= 2) {
-    container.style.display = 'flex';
+    container.classList.remove('playlist-hidden-init');
   } else {
-    container.style.display = 'none';
+    container.classList.add('playlist-hidden-init');
     return;
   }
 
@@ -1927,6 +2187,11 @@ function updateImagePlaylistDots() {
   // Auto-scroll to keep active dot visible
   ensureImagePlaylistActiveVisible();
   renderImagePlaylistDots();
+
+  // Also update full playlist active background if it's open
+  if (window._updateFullPlaylistBg) {
+    window._updateFullPlaylistBg();
+  }
 }
 
 function ensureImagePlaylistActiveVisible() {
@@ -1996,6 +2261,9 @@ function showImagePlaylist() {
   const container = document.getElementById('image-playlist-container');
   if (!container) return;
   container.classList.remove('playlist-hidden');
+  // Also show file upload toolbar in sync
+  const uploadToolbar = document.getElementById('file-upload-toolbar');
+  if (uploadToolbar) uploadToolbar.classList.remove('upload-hidden');
   resetImagePlaylistTimer();
 }
 
@@ -2003,6 +2271,9 @@ function hideImagePlaylist() {
   const container = document.getElementById('image-playlist-container');
   if (!container) return;
   container.classList.add('playlist-hidden');
+  // Also hide file upload toolbar in sync
+  const uploadToolbar = document.getElementById('file-upload-toolbar');
+  if (uploadToolbar) uploadToolbar.classList.add('upload-hidden');
 }
 
 function resetImagePlaylistTimer() {
