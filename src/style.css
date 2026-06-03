@@ -1328,20 +1328,19 @@ body.cinema-mode .playlist-overlay.visible {
 }
 
 /* ============================================================
-   11. UI TOGGLE — Hide text, keep audio + playlist
+   11. UI TOGGLE — Hide ALL UI elements, keep only bg + animations
    ============================================================ */
 
-/* ============================================================
-   11. ROTATE DEVICE PROMPT — Mobile Portrait → Landscape
-   ============================================================ */
-
+body.ui-hidden #main-content,
 body.ui-hidden #audio-panel,
 body.ui-hidden .image-playlist-container,
 body.ui-hidden .img-full-playlist,
 body.ui-hidden header,
 body.ui-hidden .credit,
 body.ui-hidden .viz-bar,
-body.ui-hidden #flip-orientation-btn {
+body.ui-hidden #flip-orientation-btn,
+body.ui-hidden .file-upload-toolbar,
+body.ui-hidden #lyrics-overlay {
   opacity: 0 !important;
   pointer-events: none !important;
   will-change: opacity;
@@ -1368,21 +1367,101 @@ body.ui-hidden .playlist-overlay.visible {
   pointer-events: auto !important;
 }
 
-/* Toggle button active state */
-#ui-toggle-btn.active {
+/* ============================================================
+   11b. UI TOGGLE STANDALONE BUTTON — fixed position, always accessible
+   ============================================================ */
+
+.ui-toggle-standalone {
+  position: fixed;
+  bottom: calc(72px + 1.6rem);
+  right: 1.5rem;
+  z-index: 100003;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.4rem 0.7rem 0.4rem 0.55rem;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 40px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 0.65rem;
+  font-weight: 400;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  will-change: transform, opacity;
+  transition:
+    transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+    background 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease,
+    box-shadow 0.3s ease,
+    opacity 0.4s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.ui-toggle-standalone:hover {
+  transform: scale(1.08);
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  box-shadow:
+    0 6px 24px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(123, 104, 238, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.ui-toggle-standalone:active {
+  transform: scale(0.92);
+  transition-duration: 0.08s;
+}
+
+.ui-toggle-standalone.active {
   color: #ff6ec7;
   border-color: rgba(255, 110, 199, 0.5);
   box-shadow: 0 0 20px rgba(255, 110, 199, 0.15);
 }
 
-/* Smooth rotation on the SVG icon when toggling UI visibility */
-#ui-toggle-btn svg {
+.ui-toggle-standalone svg {
   transition: transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   will-change: transform;
 }
 
-#ui-toggle-btn.active svg {
+.ui-toggle-standalone.active svg {
   transform: rotate(360deg);
+}
+
+.ui-toggle-label {
+  white-space: nowrap;
+}
+
+/* Adjust position on small screens — sit just above viz-bar, right side */
+@media (max-width: 480px) {
+  .ui-toggle-standalone {
+    bottom: calc(72px + 1rem);
+    right: 0.8rem;
+    padding: 0.3rem 0.5rem;
+  }
+  .ui-toggle-label {
+    display: none;
+  }
+}
+
+/* Touch optimization */
+@media (pointer: coarse) {
+  .ui-toggle-standalone {
+    min-height: 36px;
+    cursor: pointer;
+  }
 }
 
 /* ============================================================
@@ -1617,15 +1696,6 @@ body.force-landscape .rotate-device {
     font-size: 0.7rem;
     cursor: pointer;
   }
-}
-
-/* Hide file upload toolbar when UI is hidden */
-body.ui-hidden .file-upload-toolbar {
-  opacity: 0 !important;
-  pointer-events: none !important;
-  will-change: opacity;
-  transition:
-    opacity 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 /* Mobile adjustments */

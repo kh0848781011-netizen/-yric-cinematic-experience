@@ -122,6 +122,8 @@ function revokeObjectURLs(type) {
 function revokeAllObjectURLs() {
   revokeObjectURLs('images');
   revokeObjectURLs('music');
+  if (_uploadedImageUrl)  try { URL.revokeObjectURL(_uploadedImageUrl);  _uploadedImageUrl = null;  } catch {}
+  if (_uploadedAudioUrl)  try { URL.revokeObjectURL(_uploadedAudioUrl);  _uploadedAudioUrl = null;  } catch {}
 }
 
 // ============================================================
@@ -655,6 +657,11 @@ function initKeyboardNav() {
         break;
       case ' ':
         e.preventDefault();
+        // If UI is hidden, Space re-shows UI instead of toggling play
+        if (document.body.classList.contains('ui-hidden')) {
+          showAllUI();
+          break;
+        }
         togglePlay();
         break;
       case 'r':
@@ -1581,68 +1588,87 @@ async function initPlaylist() {
 }
 
 // ============================================================
-// 13. UI TOGGLE — Hide/show all UI, overrides auto-hide timers
+// 13. UI TOGGLE — Hide/show ALL UI with single click
+//     When hidden: click anywhere on screen or press Space to re-show
 // ============================================================
 
 const uiToggleBtn = document.getElementById('ui-toggle-btn');
 const STORAGE_KEY_UI_HIDDEN = 'cinematic_ui_hidden';
 
-function toggleUI() {
-  const isHidden = document.body.classList.toggle('ui-hidden');
+function showAllUI() {
+  if (!document.body.classList.contains('ui-hidden')) return;
+  document.body.classList.remove('ui-hidden');
 
-  // Swap icon: eye → eye-off when hidden
+  // Reset toggle button icon to "eye"
   const svg = uiToggleBtn.querySelector('svg');
-  if (isHidden) {
-    svg.innerHTML = `
-      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-      <line x1="1" y1="1" x2="23" y2="23" />
-    `;
-    uiToggleBtn.classList.add('active');
-    // Clear auto-hide timers — manual toggle takes precedence
-    if (audioHideTimer) clearTimeout(audioHideTimer);
-    if (imgPlHideTimer) clearTimeout(imgPlHideTimer);
-  } else {
-    svg.innerHTML = `
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-      <circle cx="12" cy="12" r="3" />
-    `;
-    uiToggleBtn.classList.remove('active');
-    // Immediately show both panels (in case auto-hide had previously fired)
-    showAudioUI();
-    showImagePlaylist();
-    // Resume auto-hide timers when showing UI again
-    resetAudioHideTimer();
-    resetImagePlaylistTimer();
-  }
+  svg.innerHTML = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+  uiToggleBtn.classList.remove('active');
 
-  // Save state
-  try {
-    localStorage.setItem(STORAGE_KEY_UI_HIDDEN, String(isHidden));
-  } catch {}
+  // Restore panels & resume auto-hide timers
+  showAudioUI();
+  showImagePlaylist();
+  resetAudioHideTimer();
+  resetImagePlaylistTimer();
+
+  try { localStorage.setItem(STORAGE_KEY_UI_HIDDEN, 'false'); } catch {}
+}
+
+function hideAllUI() {
+  if (document.body.classList.contains('ui-hidden')) return;
+  document.body.classList.add('ui-hidden');
+
+  // Swap toggle button icon to "eye-off"
+  const svg = uiToggleBtn.querySelector('svg');
+  svg.innerHTML = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>`;
+  uiToggleBtn.classList.add('active');
+
+  // Stop auto-hide timers — manual hide takes priority
+  if (audioHideTimer) clearTimeout(audioHideTimer);
+  if (imgPlHideTimer) clearTimeout(imgPlHideTimer);
+
+  try { localStorage.setItem(STORAGE_KEY_UI_HIDDEN, 'true'); } catch {}
+}
+
+function toggleUI() {
+  if (document.body.classList.contains('ui-hidden')) {
+    showAllUI();
+  } else {
+    hideAllUI();
+  }
 }
 
 function initUiToggle() {
   if (!uiToggleBtn) return;
 
-  uiToggleBtn.addEventListener('click', (e) => {
-    createRipple(e);
+  // Toggle button click
+  uiToggleBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
     toggleUI();
   });
 
-  // Restore saved state
+  // ALWAYS-ACTIVE listeners that only act when UI is hidden:
+  // 1. Click anywhere on screen → show UI
+  document.addEventListener('click', function(e) {
+    if (!document.body.classList.contains('ui-hidden')) return;
+    if (e.target.closest('#ui-toggle-btn')) return; // ignore toggle button itself
+    showAllUI();
+  });
+
+  // 2. Press Space → show UI (instead of toggling play)
+  document.addEventListener('keydown', function(e) {
+    if (e.key === ' ' && document.body.classList.contains('ui-hidden')) {
+      e.preventDefault();
+      showAllUI();
+    }
+  });
+
+  // Restore saved state from localStorage
   try {
-    const saved = localStorage.getItem(STORAGE_KEY_UI_HIDDEN);
-    if (saved === 'true') {
+    if (localStorage.getItem(STORAGE_KEY_UI_HIDDEN) === 'true') {
       document.body.classList.add('ui-hidden');
       const svg = uiToggleBtn.querySelector('svg');
-      svg.innerHTML = `
-        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-        <line x1="1" y1="1" x2="23" y2="23" />
-      `;
+      svg.innerHTML = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>`;
       uiToggleBtn.classList.add('active');
-      // Clear auto-hide timers
       if (audioHideTimer) clearTimeout(audioHideTimer);
       if (imgPlHideTimer) clearTimeout(imgPlHideTimer);
     }
@@ -1917,9 +1943,13 @@ function initImageFullPlaylist() {
 }
 
 // ============================================================
-// 16b. FILE UPLOAD HANDLERS — URL.createObjectURL()
-//      Thêm Ảnh / Thêm Nhạc từ máy tính với cleanup
+// 16b. FILE UPLOAD — URL.createObjectURL() direct approach
+//      Thêm Ảnh → document.body.style.backgroundImage
+//      Thêm Nhạc → <audio> src + .play()
 // ============================================================
+
+let _uploadedImageUrl = null;
+let _uploadedAudioUrl = null;
 
 function initFileUploads() {
   const imageInput = document.getElementById('image-upload-input');
@@ -1934,117 +1964,96 @@ function initFileUploads() {
 }
 
 /**
- * Handle image file upload: create object URLs, add to IMAGES array, rebuild UI
+ * Handle image upload: create blob URL, assign to body backgroundImage
  */
 function handleImageUpload(event) {
-  const files = Array.from(event.target.files);
-  if (!files || files.length === 0) return;
-
-  // Filter for image files only
-  const imageFiles = files.filter(f => f.type.startsWith('image/'));
-  if (imageFiles.length === 0) {
-    showToast('Vui lòng chọn file ảnh (JPG, PNG, WebP...)', 'error', 3000);
-    return;
-  }
-
-  // Clean up old uploaded image object URLs to prevent memory leaks
-  revokeObjectURLs('images');
-
-  const newImages = imageFiles.map((file, idx) => {
-    const objectUrl = URL.createObjectURL(file);
-    objectURLs.images.push(objectUrl);
-    return {
-      url: objectUrl,
-      credit: file.name.replace(/\.[^.]+$/, '') || `Uploaded ${idx + 1}`,
-      type: 'image'
-    };
-  });
-
-  const prevCount = IMAGES.length;
-  IMAGES.push(...newImages);
-
-  // Rebuild slides
-  initSlides();
-
-  // Rebuild image playlist dots
-  const container = document.getElementById('image-playlist-container');
-  if (container) {
-    if (IMAGES.length >= 2) {
-      container.classList.remove('playlist-hidden-init');
+  try {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Vui lòng chọn file ảnh (JPG, PNG, WebP...)', 'error', 3000);
+      return;
     }
-    buildImagePlaylistDots();
-    updateImagePlaylistDots();
+
+    // Revoke previous upload to prevent memory leak
+    if (_uploadedImageUrl) URL.revokeObjectURL(_uploadedImageUrl);
+
+    _uploadedImageUrl = URL.createObjectURL(file);
+    document.body.style.backgroundImage = 'url("' + _uploadedImageUrl + '")';
+    document.body.style.backgroundSize = 'cover';
+    document.body.style.backgroundPosition = 'center';
+    document.body.style.backgroundRepeat = 'no-repeat';
+
+    showToast('📷 Đã thêm ảnh: ' + file.name, 'success', 2000);
+    event.target.value = '';
+  } catch (err) {
+    console.error('handleImageUpload error:', err);
+    showToast('Lỗi khi tải ảnh lên', 'error', 3000);
   }
-
-  // If this is the first image added, switch to it
-  if (prevCount === 1 && IMAGES.length > 1) {
-    switchBackground(prevCount);
-  }
-
-  // Show success toast
-  const count = newImages.length;
-  showToast(`📷 Đã thêm ${count} ảnh từ máy tính`, 'success', 3000);
-
-  // Reset the input so user can re-upload same files
-  event.target.value = '';
 }
 
 /**
- * Handle music file upload: create object URLs, add to musicTracks, rebuild playlist
+ * Handle music upload: create blob URL, assign to <audio> element, play
  */
 function handleMusicUpload(event) {
-  const files = Array.from(event.target.files);
-  if (!files || files.length === 0) return;
+  try {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('audio/')) {
+      showToast('Vui lòng chọn file nhạc (MP3, WAV, M4A...)', 'error', 3000);
+      return;
+    }
 
-  // Filter for audio files only
-  const audioFiles = files.filter(f => f.type.startsWith('audio/'));
-  if (audioFiles.length === 0) {
-    showToast('Vui lòng chọn file nhạc (MP3, WAV, M4A...)', 'error', 3000);
-    return;
-  }
+    // Revoke previous upload
+    if (_uploadedAudioUrl) URL.revokeObjectURL(_uploadedAudioUrl);
 
-  // Clean up old uploaded music object URLs to prevent memory leaks
-  revokeObjectURLs('music');
+    _uploadedAudioUrl = URL.createObjectURL(file);
 
-  const wasEmpty = musicTracks.length === 0;
-  const startIndex = musicTracks.length;
+    // Use existing currentAudio if available, otherwise create new <audio>
+    if (currentAudio) {
+      // Pause current track before loading new source
+      currentAudio.pause();
+      disconnectVisualizer();
+      currentAudio.src = _uploadedAudioUrl;
+      currentAudio.loop = true;
+    } else {
+      currentAudio = new Audio(_uploadedAudioUrl);
+      currentAudio.loop = true;
+      // Add progress bar listeners for new audio element
+      currentAudio.addEventListener('timeupdate', updateProgress);
+      currentAudio.addEventListener('loadedmetadata', function() {
+        totalTimeEl.textContent = formatTime(currentAudio.duration);
+        seekProgress.style.width = '0%';
+        currentTimeEl.textContent = '0:00';
+      });
+    }
 
-  const newTracks = audioFiles.map((file, idx) => {
-    const objectUrl = URL.createObjectURL(file);
-    objectURLs.music.push(objectUrl);
-    return {
-      fileName: file.name,
-      displayName: cleanTrackName(file.name) || `Uploaded ${startIndex + idx + 1}`,
-      url: objectUrl,
-      index: startIndex + idx,
-      _local: true  // mark as local upload
-    };
-  });
+    // Connect visualizer to the new audio source
+    connectVisualizer(currentAudio);
+    setVolume(isMuted ? 0 : (volumeSlider ? parseFloat(volumeSlider.value) : 0.8));
 
-  musicTracks.push(...newTracks);
-
-  // Rebuild playlist UI
-  buildPlaylist();
-
-  // Auto-play first uploaded track if no track is currently playing
-  if (wasEmpty && musicTracks.length > 0) {
-    switchTrack(startIndex);
-    if (!isPlaying) {
+    // Play audio
+    currentAudio.play().then(function() {
       isPlaying = true;
       updatePlayButton();
-      fadeInAudio();
       vizDots?.classList.add('active');
       startLyricsCycle();
       saveState();
-    }
+    }).catch(function() {
+      // Auto-play blocked by browser
+      isPlaying = false;
+      updatePlayButton();
+    });
+
+    // Update UI
+    trackLabel.textContent = file.name.replace(/\.[^.]+$/, '');
+
+    showToast('🎵 Đã thêm nhạc: ' + file.name, 'success', 2000);
+    event.target.value = '';
+  } catch (err) {
+    console.error('handleMusicUpload error:', err);
+    showToast('Lỗi khi tải nhạc lên', 'error', 3000);
   }
-
-  // Update toast welcome message
-  const msg = `🎵 Đã thêm ${newTracks.length} bài nhạc từ máy tính`;
-  showToast(msg, 'success', 3000);
-
-  // Reset the input so user can re-upload same files
-  event.target.value = '';
 }
 
 // ============================================================
