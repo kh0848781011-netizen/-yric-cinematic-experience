@@ -133,6 +133,54 @@ function revokeAllObjectURLs() {
 const STORAGE_KEY_BG = 'cinematic_bg_index';
 const STORAGE_KEY_MUTED = 'cinematic_is_muted';
 const STORAGE_KEY_VOLUME = 'cinematic_volume';
+const STORAGE_KEY_TRACK = 'cinematic_track_index';
+const STORAGE_KEY_PLAYING = 'cinematic_is_playing';
+const STORAGE_KEY_UPLOADED_IMG = 'cinematic_uploaded_image_b64';
+const STORAGE_KEY_UPLOADED_IMG_NAME = 'cinematic_uploaded_image_name';
+const STORAGE_KEY_UPLOADED_MUSIC = 'cinematic_uploaded_music_b64';
+const STORAGE_KEY_UPLOADED_MUSIC_NAME = 'cinematic_uploaded_music_name';
+
+const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB limit (base64 expands ~33%, so 3MB file ≈ 4MB in localStorage)
+
+// ============================================================
+// Play Overlay — shows when browser blocks autoplay
+// ============================================================
+let playOverlayEl = null;
+
+function createPlayOverlay() {
+  if (playOverlayEl) return;
+  playOverlayEl = document.createElement('div');
+  playOverlayEl.id = 'play-overlay';
+  playOverlayEl.innerHTML = `
+    <div class="play-overlay-inner">
+      <button id="play-overlay-btn" class="play-overlay-btn" aria-label="Play music">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor">
+          <polygon points="6,3 20,12 6,21" />
+        </svg>
+      </button>
+      <p class="play-overlay-text">Nhấn để phát nhạc</p>
+    </div>
+  `;
+  document.body.appendChild(playOverlayEl);
+  playOverlayEl.addEventListener('click', handlePlayOverlayClick);
+}
+
+function showPlayOverlay() {
+  createPlayOverlay();
+  playOverlayEl.classList.add('visible');
+}
+
+function hidePlayOverlay() {
+  if (playOverlayEl) {
+    playOverlayEl.classList.remove('visible');
+  }
+}
+
+function handlePlayOverlayClick() {
+  hidePlayOverlay();
+  // User interaction satisfies autoplay policy — togglePlay will succeed
+  togglePlay();
+}
 
 
 
@@ -820,7 +868,8 @@ async function init() {
   }
 
   // Initialize first music track independently (no background coupling)
-  if (musicTracks.length > 0 && currentTrackIndex === -1) {
+  // Only if no uploaded music was restored from localStorage
+  if (musicTracks.length > 0 && currentTrackIndex === -1 && !_uploadedAudioUrl) {
     switchTrack(0);
   }
 
@@ -972,30 +1021,40 @@ function fadeInAudio() {
     audioContext.resume();
   }
 
-  currentAudio.play().catch(() => {
-    // Auto-play may be blocked by browser — user must interact first
+  // Ensure audio is loaded before playing (only reload if not already loaded)
+  if (currentAudio.readyState < 2) {
+    currentAudio.load();
+  }
+
+  currentAudio.play().then(() => {
+    // Audio started playing — update state + fade in
+    isPlaying = true;
+    updatePlayButton();
+    vizDots?.classList.add('active');
+    startLyricsCycle();
+
+    if (targetVol <= 0) {
+      audioFading = false;
+      return;
+    }
+    const step = targetVol / (FADE_DURATION / 50);
+    const fadeInterval = setInterval(() => {
+      const current = getVolume();
+      if (current + step >= targetVol) {
+        setVolume(targetVol);
+        clearInterval(fadeInterval);
+        audioFading = false;
+      } else {
+        setVolume(Math.min(targetVol, current + step));
+      }
+    }, 50);
+  }).catch(() => {
+    // Auto-play blocked by browser — show play overlay for user interaction
     isPlaying = false;
     audioFading = false;
     updatePlayButton();
+    showPlayOverlay();
   });
-
-  if (targetVol <= 0) {
-    audioFading = false;
-    return;
-  }
-
-  const step = targetVol / (FADE_DURATION / 50);
-
-  const fadeInterval = setInterval(() => {
-    const current = getVolume();
-    if (current + step >= targetVol) {
-      setVolume(targetVol);
-      clearInterval(fadeInterval);
-      audioFading = false;
-    } else {
-      setVolume(Math.min(targetVol, current + step));
-    }
-  }, 50);
 }
 
 function syncLyrics() {
@@ -1033,8 +1092,10 @@ function switchTrack(trackIndex) {
   currentTrackIndex = trackIndex;
 
   // Create new audio
-  currentAudio = new Audio(musicSrc);
+  currentAudio = new Audio();
   currentAudio.loop = true;
+  currentAudio.src = musicSrc;
+  currentAudio.load();
 
   // Attach progress listeners
   currentAudio.addEventListener('timeupdate', updateProgress);
@@ -1085,13 +1146,25 @@ function togglePlay() {
       audioContext.resume();
     }
     setVolume(isMuted ? 0 : parseFloat(volumeSlider.value));
-    currentAudio.play().catch(() => {
-      // Browser may block autoplay
+    // Only reload if audio not yet loaded (avoids resetting playback position)
+    if (currentAudio.readyState < 2) {
+      currentAudio.load();
+    }
+    currentAudio.play().then(() => {
+      isPlaying = true;
+      vizDots?.classList.add('active');
+      updateVolumeSlider();
+      startLyricsCycle();
+      updatePlayButton();
+      saveState();
+    }).catch(() => {
+      // Browser blocked autoplay — show play overlay
+      isPlaying = false;
+      updatePlayButton();
+      showPlayOverlay();
     });
-    isPlaying = true;
-    vizDots?.classList.add('active');
-    updateVolumeSlider();
-    startLyricsCycle();
+    // Don't update state optimistically — wait for play() promise
+    return;
   }
 
   updatePlayButton();
@@ -1489,14 +1562,9 @@ function buildPlaylist() {
         if (currentTrackIndex !== trackIdx) {
           switchTrack(trackIdx);
         }
-        // Auto-play the selected track
+        // Auto-play the selected track (only set isPlaying after successful play)
         if (!isPlaying) {
-          isPlaying = true;
-          updatePlayButton();
           fadeInAudio();
-          vizDots?.classList.add('active');
-          startLyricsCycle();
-          saveState();
         }
       }
       // Auto-close playlist with elegant animation
@@ -1684,6 +1752,8 @@ function saveState() {
     localStorage.setItem(STORAGE_KEY_BG, String(currentIndex));
     localStorage.setItem(STORAGE_KEY_MUTED, String(isMuted));
     localStorage.setItem(STORAGE_KEY_VOLUME, String(getVolume()));
+    localStorage.setItem(STORAGE_KEY_TRACK, String(currentTrackIndex));
+    localStorage.setItem(STORAGE_KEY_PLAYING, String(isPlaying));
   } catch {
     // localStorage may be unavailable
   }
@@ -1712,6 +1782,70 @@ function restoreState() {
     if (savedVolume !== null && volumeSlider) {
       volumeSlider.value = savedVolume;
       volumeSlider.style.setProperty('--vol-pct', `${parseFloat(savedVolume) * 100}%`);
+    }
+
+    // Restore uploaded image from localStorage (base64)
+    const savedImgB64 = localStorage.getItem(STORAGE_KEY_UPLOADED_IMG);
+    const savedImgName = localStorage.getItem(STORAGE_KEY_UPLOADED_IMG_NAME);
+    if (savedImgB64) {
+      try {
+        const byteString = atob(savedImgB64.split(',')[1] || savedImgB64);
+        const mimeString = savedImgB64.split(',')[0]?.split(':')[1]?.split(';')[0] || 'image/jpeg';
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+        const blob = new Blob([ab], { type: mimeString });
+        _uploadedImageUrl = URL.createObjectURL(blob);
+        document.body.style.backgroundImage = `url("${_uploadedImageUrl}")`;
+        document.body.style.backgroundSize = 'cover';
+        document.body.style.backgroundPosition = 'center';
+        document.body.style.backgroundRepeat = 'no-repeat';
+        showToast(`📷 Đã khôi phục ảnh: ${savedImgName || 'Ảnh đã lưu'}`, 'success', 2000);
+      } catch (err) {
+        console.warn('Failed to restore uploaded image:', err);
+        localStorage.removeItem(STORAGE_KEY_UPLOADED_IMG);
+        localStorage.removeItem(STORAGE_KEY_UPLOADED_IMG_NAME);
+      }
+    }
+
+    // Restore uploaded music from localStorage (base64)
+    const savedMusB64 = localStorage.getItem(STORAGE_KEY_UPLOADED_MUSIC);
+    const savedMusName = localStorage.getItem(STORAGE_KEY_UPLOADED_MUSIC_NAME);
+    if (savedMusB64) {
+      try {
+        const byteString = atob(savedMusB64.split(',')[1] || savedMusB64);
+        const mimeString = savedMusB64.split(',')[0]?.split(':')[1]?.split(';')[0] || 'audio/mpeg';
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+        const blob = new Blob([ab], { type: mimeString });
+        _uploadedAudioUrl = URL.createObjectURL(blob);
+
+        // Create audio element for the restored music
+        if (currentAudio) {
+          currentAudio.pause();
+          disconnectVisualizer();
+        }
+        currentAudio = new Audio(_uploadedAudioUrl);
+        currentAudio.loop = true;
+        currentAudio.addEventListener('timeupdate', updateProgress);
+        currentAudio.addEventListener('loadedmetadata', () => {
+          totalTimeEl.textContent = formatTime(currentAudio.duration);
+          seekProgress.style.width = '0%';
+          currentTimeEl.textContent = '0:00';
+        });
+        connectVisualizer(currentAudio);
+        setVolume(isMuted ? 0 : (volumeSlider ? parseFloat(volumeSlider.value) : 0.8));
+        currentAudio.load();
+        trackLabel.textContent = savedMusName || 'Uploaded Music';
+        currentTrackIndex = -1;
+
+        showToast(`🎵 Đã khôi phục nhạc: ${savedMusName || 'Nhạc đã lưu'}`, 'success', 2000);
+      } catch (err) {
+        console.warn('Failed to restore uploaded music:', err);
+        localStorage.removeItem(STORAGE_KEY_UPLOADED_MUSIC);
+        localStorage.removeItem(STORAGE_KEY_UPLOADED_MUSIC_NAME);
+      }
     }
   } catch {
     // localStorage may be unavailable
@@ -1975,6 +2109,13 @@ function handleImageUpload(event) {
       return;
     }
 
+    // Check file size limit
+    if (file.size > MAX_FILE_SIZE) {
+      showToast(`File quá lớn (${(file.size / 1024 / 1024).toFixed(1)}MB). Vui lòng chọn ảnh nhỏ hơn 3MB.`, 'error', 4000);
+      event.target.value = '';
+      return;
+    }
+
     // Revoke previous upload to prevent memory leak
     if (_uploadedImageUrl) URL.revokeObjectURL(_uploadedImageUrl);
 
@@ -1983,6 +2124,20 @@ function handleImageUpload(event) {
     document.body.style.backgroundSize = 'cover';
     document.body.style.backgroundPosition = 'center';
     document.body.style.backgroundRepeat = 'no-repeat';
+
+    // Save to localStorage as base64 for persistence across refresh
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        // Strip the data:image/...;base64, prefix for more compact storage
+        localStorage.setItem(STORAGE_KEY_UPLOADED_IMG, e.target.result);
+        localStorage.setItem(STORAGE_KEY_UPLOADED_IMG_NAME, file.name);
+      } catch (err) {
+        console.warn('Could not save image to localStorage:', err);
+        showToast('File ảnh quá lớn để lưu tự động', 'error', 2000);
+      }
+    };
+    reader.readAsDataURL(file);
 
     showToast('📷 Đã thêm ảnh: ' + file.name, 'success', 2000);
     event.target.value = '';
@@ -2004,35 +2159,57 @@ function handleMusicUpload(event) {
       return;
     }
 
+    // Check file size limit
+    if (file.size > MAX_FILE_SIZE) {
+      showToast(`File quá lớn (${(file.size / 1024 / 1024).toFixed(1)}MB). Vui lòng chọn nhạc nhỏ hơn 3MB.`, 'error', 4000);
+      event.target.value = '';
+      return;
+    }
+
     // Revoke previous upload
     if (_uploadedAudioUrl) URL.revokeObjectURL(_uploadedAudioUrl);
 
     _uploadedAudioUrl = URL.createObjectURL(file);
 
-    // Use existing currentAudio if available, otherwise create new <audio>
+    // Save to localStorage as base64 for persistence across refresh
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        localStorage.setItem(STORAGE_KEY_UPLOADED_MUSIC, e.target.result);
+        localStorage.setItem(STORAGE_KEY_UPLOADED_MUSIC_NAME, file.name);
+      } catch (err) {
+        console.warn('Could not save music to localStorage:', err);
+        showToast('File nhạc quá lớn để lưu tự động', 'error', 2000);
+      }
+    };
+    reader.readAsDataURL(file);
+
+    // Disconnect old visualizer before switching
+    disconnectVisualizer();
+
+    // Create new audio element to avoid stale source issues
     if (currentAudio) {
-      // Pause current track before loading new source
       currentAudio.pause();
-      disconnectVisualizer();
-      currentAudio.src = _uploadedAudioUrl;
-      currentAudio.loop = true;
-    } else {
-      currentAudio = new Audio(_uploadedAudioUrl);
-      currentAudio.loop = true;
-      // Add progress bar listeners for new audio element
-      currentAudio.addEventListener('timeupdate', updateProgress);
-      currentAudio.addEventListener('loadedmetadata', function() {
-        totalTimeEl.textContent = formatTime(currentAudio.duration);
-        seekProgress.style.width = '0%';
-        currentTimeEl.textContent = '0:00';
-      });
+      currentAudio.src = '';
+      currentAudio = null;
     }
+    currentAudio = new Audio(_uploadedAudioUrl);
+    currentAudio.loop = true;
+    currentAudio.addEventListener('timeupdate', updateProgress);
+    currentAudio.addEventListener('loadedmetadata', function() {
+      totalTimeEl.textContent = formatTime(currentAudio.duration);
+      seekProgress.style.width = '0%';
+      currentTimeEl.textContent = '0:00';
+    });
 
     // Connect visualizer to the new audio source
     connectVisualizer(currentAudio);
     setVolume(isMuted ? 0 : (volumeSlider ? parseFloat(volumeSlider.value) : 0.8));
 
-    // Play audio
+    // Ensure audio source is loaded before playing
+    currentAudio.load();
+
+    // Play audio with Promise handling
     currentAudio.play().then(function() {
       isPlaying = true;
       updatePlayButton();
@@ -2040,13 +2217,15 @@ function handleMusicUpload(event) {
       startLyricsCycle();
       saveState();
     }).catch(function() {
-      // Auto-play blocked by browser
+      // Auto-play blocked — show play overlay
       isPlaying = false;
       updatePlayButton();
+      showPlayOverlay();
     });
 
     // Update UI
     trackLabel.textContent = file.name.replace(/\.[^.]+$/, '');
+    currentTrackIndex = -1; // uploaded track has no index in musicTracks
 
     showToast('🎵 Đã thêm nhạc: ' + file.name, 'success', 2000);
     event.target.value = '';
