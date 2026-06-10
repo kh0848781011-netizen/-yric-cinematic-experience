@@ -1,0 +1,30 @@
+{
+    "name": "lyric-cinematic-experience",
+    "version": "1.0.0",
+    "description": "Cinematic Lyric Typography Experience — deployable to Cloudflare Pages",
+    "type": "module",
+    "engines": {
+        "node": ">=18"
+    },
+    "scripts": {
+        "start": "node server/index.js",
+        "dev": "concurrently \"npm run server\" \"npm run client\"",
+        "server": "node server/index.js",
+        "client": "vite",
+        "build": "vite build && node scripts/build-media.js",
+        "build:vite": "vite build",
+        "build:media": "node scripts/build-media.js",
+        "preview": "vite preview",
+        "deploy": "npm run build && wrangler pages deploy dist --project-name=lyric-cinematic-experience",
+        "deploy:dry-run": "npm run build && wrangler pages deploy dist --project-name=lyric-cinematic-experience --dry-run"
+    },
+    "dependencies": {
+        "concurrently": "^8.2.2",
+        "cors": "^2.8.5",
+        "express": "^4.18.2"
+    },
+    "devDependencies": {
+        "gsap": "^3.12.5",
+        "vite": "^5.1.0"
+    }
+}

@@ -1,0 +1,16 @@
+# ============================================================
+# wrangler.toml — Cloudflare Pages Configuration
+# ============================================================
+# Cách deploy:
+#   npm run deploy
+#
+# Lần đầu cần:
+#   npx wrangler login
+#   npm run deploy
+# ============================================================
+
+name = "lyric-cinematic-experience"
+pages_build_output_dir = "dist"
+
+[build]
+command = "npm run build"

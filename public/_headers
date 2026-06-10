@@ -1,0 +1,72 @@
+# ============================================================
+# ⚡ SECURITY HEADERS — Cloudflare Pages (Hardened)
+# ============================================================
+# CHÚ Ý: Mỗi header phải trên MỘT DÒNG duy nhất
+# Cloudflare Pages KHÔNG hỗ trợ xuống dòng trong giá trị header
+# ============================================================
+
+/*
+  # ===== XSS PROTECTION (cũ) — cho trình duyệt cũ =====
+  X-XSS-Protection: 1; mode=block
+
+  # ===== CHỐNG CLICKJACKING =====
+  X-Frame-Options: DENY
+
+  # ===== CHỐNG MIME SNIFFING =====
+  X-Content-Type-Options: nosniff
+
+  # ===== CONTENT SECURITY POLICY (CSP) — phòng XSS toàn diện =====
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' https://fonts.gstatic.com; media-src 'self' https: blob:; connect-src 'self' https:; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; manifest-src 'self'; upgrade-insecure-requests
+
+  # ===== HSTS — buộc HTTPS, preload =====
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+
+  # ===== KIỂM SOÁT REFERRER =====
+  Referrer-Policy: strict-origin-when-cross-origin
+
+  # ===== PERMISSIONS POLICY — khóa toàn bộ API trình duyệt không cần =====
+  Permissions-Policy: accelerometer=(), autoplay=(self), camera=(), cross-origin-isolated=(), display-capture=(), encrypted-media=(self), fullscreen=(self), geolocation=(), gyroscope=(), keyboard-map=(), magnetometer=(), microphone=(), midi=(), payment=(), picture-in-picture=(self), publickey-credentials-get=(), screen-wake-lock=(), sync-xhr=(self), usb=(), web-share=(self), xr-spatial-tracking=()
+
+  # ===== CHỐNG ATTACK THÔNG QUA DNS PREFETCH =====
+  X-DNS-Prefetch-Control: off
+
+  # ===== CHỐNG HOTLINK (chặn web khác nhúng media) =====
+  Cross-Origin-Resource-Policy: same-site
+
+  # ===== CÔ LẬP CỬA SỔ (chống tabnabbing) =====
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+
+  # ===== NGUỒN GỐC TIN CẬY =====
+  X-Permitted-Cross-Domain-Policies: none
+
+# ============================================================
+# ASSETS TĨNH — cache 1 năm (hash-based filenames từ Vite build)
+# ============================================================
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+# ============================================================
+# API JSON — KHÔNG cache (luôn trả dữ liệu mới)
+# ============================================================
+/api/*
+  Cache-Control: no-cache, no-store, must-revalidate
+  X-Content-Type-Options: nosniff
+
+# ============================================================
+# MEDIA FILES — cache 1 giờ, chống hotlink (same-site)
+# ============================================================
+/server/background_images/*
+  Cache-Control: public, max-age=3600
+  X-Content-Type-Options: nosniff
+  Cross-Origin-Resource-Policy: same-site
+
+/server/background_music/*
+  Cache-Control: public, max-age=3600
+  X-Content-Type-Options: nosniff
+  Cross-Origin-Resource-Policy: same-site
+
+/server/background_videos/*
+  Cache-Control: public, max-age=3600
+  X-Content-Type-Options: nosniff
+  Cross-Origin-Resource-Policy: same-site
